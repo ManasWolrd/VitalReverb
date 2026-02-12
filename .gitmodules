@@ -1,0 +1,9 @@
+[submodule "libs/JUCE"]
+	path = libs/JUCE
+	url = https://github.com/juce-framework/JUCE.git
+[submodule "libs/AudioFFT"]
+	path = libs/AudioFFT
+	url = https://github.com/ManasWolrd/AudioFFT.git
+[submodule "src/pluginshared"]
+	path = src/pluginshared
+	url = https://github.com/ManasWolrd/pluginshared.git
