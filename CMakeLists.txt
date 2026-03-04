@@ -3,11 +3,11 @@ cmake_minimum_required(VERSION 3.22.1)
 # ----------------------------------------
 # 插件信息，改了记得改src/global.hpp
 # ----------------------------------------
-set(TEAM_NAME ManasWorld)
-set(PLUGIN_REPO_URL "https://github.com/ManasWorld/plugin-template")
-set(PLUGIN_NAME plugin-template)
+set(TEAM_NAME ManasWolrd)
+set(PLUGIN_REPO_URL "https://github.com/ManasWolrd/VitalReverb")
+set(PLUGIN_NAME VitalReverb)
 set(PLUGIN_VERSION 0.0.1)
-set(PLUGIN_BUNDLE_ID "com.manasworld.${PLUGIN_NAME}")
+set(PLUGIN_BUNDLE_ID "com.ManasWolrd.${PLUGIN_NAME}")
 
 option(BUILD_STANDALONE "Build Standalone plugin format" ON)
 option(BUILD_VST3 "Build VST3 plugin format" ON)
@@ -66,11 +66,43 @@ juce_add_plugin(${PROJECT_NAME}
 )
 
 # 添加源文件
-file(GLOB_RECURSE src
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+target_sources(${PROJECT_NAME}
+PRIVATE
+    # src/dsp/dsp_lane4_template.cpp
+    src/dsp/dsp_dispatch.cpp
+    src/ui/plugin_ui.cpp
+    src/PluginEditor.cpp
+    src/PluginProcessor.cpp
 )
-target_sources(${PROJECT_NAME} PRIVATE ${src})
+
+### simd dispatch
+if(APPLE)
+    target_sources(${PROJECT_NAME}
+    PRIVATE
+        src/dsp/dsp_neon.cpp
+        src/dsp/dsp_avx2.cpp
+        src/dsp/dsp_avx.cpp
+        src/dsp/dsp_sse4.cpp
+        src/dsp/dsp_sse2.cpp
+    )
+    set_source_files_properties("src/dsp/dsp_neon.cpp" PROPERTIES COMPILE_FLAGS "-arch arm64")
+    set_source_files_properties("src/dsp/dsp_sse2.cpp" PROPERTIES COMPILE_FLAGS "-arch x86_64 -msse2")
+    set_source_files_properties("src/dsp/dsp_sse4.cpp" PROPERTIES COMPILE_FLAGS "-arch x86_64 -msse4.1")
+    set_source_files_properties("src/dsp/dsp_avx.cpp" PROPERTIES COMPILE_FLAGS "-arch x86_64 -mavx")
+    set_source_files_properties("src/dsp/dsp_avx2.cpp" PROPERTIES COMPILE_FLAGS "-arch x86_64 -mavx2")
+else()
+    target_sources(${PROJECT_NAME}
+    PRIVATE
+        src/dsp/dsp_avx2.cpp
+        src/dsp/dsp_avx.cpp
+        src/dsp/dsp_sse4.cpp
+        src/dsp/dsp_sse2.cpp
+    )
+    set_source_files_properties("src/dsp/dsp_sse2.cpp" PROPERTIES COMPILE_FLAGS "-msse2")
+    set_source_files_properties("src/dsp/dsp_sse4.cpp" PROPERTIES COMPILE_FLAGS "-msse4.1")
+    set_source_files_properties("src/dsp/dsp_avx.cpp" PROPERTIES COMPILE_FLAGS "-mavx")
+    set_source_files_properties("src/dsp/dsp_avx2.cpp" PROPERTIES COMPILE_FLAGS "-mavx2")
+endif()
 
 # 头文件目录
 target_include_directories(${PROJECT_NAME}
@@ -163,3 +195,23 @@ endif()
 if(DEFINED DBUILD_IN_CI)
     target_compile_definitions(${PROJECT_NAME} PRIVATE DBUILD_IN_CI=1)
 endif()
+
+# ----------------------------------------
+# cpp_simd_detector
+# ----------------------------------------
+set(CPP_SIMD_DETECTOR_BUILD_EXAMPLES OFF)
+add_subdirectory(libs/cpp_simd_detector)
+target_link_libraries(${PROJECT_NAME} PUBLIC cpp_simd_detector)
+
+# ----------------------------------------
+# simde
+# ----------------------------------------
+add_library(simde INTERFACE)
+target_include_directories(simde INTERFACE libs/simde)
+target_link_libraries(${PROJECT_NAME} PUBLIC simde)
+
+# ----------------------------------------
+# qwqdsp
+# ----------------------------------------
+add_subdirectory(libs/qwqdsp)
+target_link_libraries(${PROJECT_NAME} PUBLIC qwqdsp)

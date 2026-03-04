@@ -14,7 +14,10 @@ public:
 
 private:
     PluginUi ui_;
-
+    float scale_{1.0f};
+    int ui_width_{};
+    int ui_height_{};
+    
     struct PluginConfig;
     juce::SharedResourcePointer<PluginConfig> plugin_config_;
 

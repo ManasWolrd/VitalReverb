@@ -12,7 +12,121 @@ EmptyAudioProcessor::EmptyAudioProcessor()
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)
 #endif
       ) {
+    dsp_processor_ = dsp::GetProcessorDsp();
+
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "chorus amount",
+            "chorus amount",
+            0.0f, 1.0f, 0.05f
+        );
+        param_chorus_amount_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "chorus freq",
+            "chorus freq",
+            juce::NormalisableRange<float>{0.003f, 8.0f, 0.001f, 0.4f},
+            0.25f
+        );
+        param_chorus_freq_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "mix",
+            "mix",
+            0.0f, 1.0f, 0.25f
+        );
+        param_wet_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "pre lowpass",
+            "pre lowpass",
+            0.0f, 130.0f, 0.0f
+        );
+        param_pre_lowpass_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "pre highpass",
+            "pre highpass",
+            0.0f, 130.0f, 110.0f
+        );
+        param_pre_highpass_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "low damp",
+            "low damp",
+            0.0f, 130.0f, 0.0f
+        );
+        param_low_damp_pitch_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "high damp",
+            "high damp",
+            0.0f, 130.0f, 90.0f
+        );
+        param_high_damp_pitch_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "low gain",
+            "low gain",
+            -6.0f, 0.0f, 0.0f
+        );
+        param_low_damp_db_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "high gain",
+            "high gain",
+            -6.0f, 0.0f, -1.0f
+        );
+        param_high_damp_db_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "size",
+            "size",
+            0.0f, 1.0f, 0.5f
+        );
+        param_size_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "decay",
+            "decay",
+            juce::NormalisableRange<float>{15.0f, 64000.0f, 1.0f, 0.4f},
+            1000.0f
+        );
+        param_decay_ms_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            "predelay",
+            "predelay",
+            juce::NormalisableRange<float>{0.0f, 300.0f, 1.0f, 0.4f},
+            0.0f
+        );
+        param_predelay_ = p.get();
+        layout.add(std::move(p));
+    }
 
     value_tree_ = std::make_unique<juce::AudioProcessorValueTreeState>(*this, nullptr, kParameterValueTreeIdentify,
                                                                        std::move(layout));
@@ -84,7 +198,10 @@ void EmptyAudioProcessor::changeProgramName(int index, const juce::String& newNa
 
 //==============================================================================
 void EmptyAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+    if (!dsp_processor_.IsValid()) return;
+
     float fs = static_cast<float>(sampleRate);
+    dsp_processor_.init(dsp_state_, fs);
     param_listener_.MarkAll();
 }
 
@@ -116,12 +233,30 @@ bool EmptyAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) con
 }
 
 void EmptyAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+    if (!dsp_processor_.IsValid()) return;
+
     juce::ScopedNoDenormals noDenormals;
     param_listener_.HandleDirty();
 
-    size_t const num_samples = buffer.getNumSamples();
+    int const num_samples = buffer.getNumSamples();
     float* left_ptr = buffer.getWritePointer(0);
     float* right_ptr = buffer.getWritePointer(1);
+
+    dsp_param_.chorus_amount = param_chorus_amount_->get();
+    dsp_param_.chorus_freq = param_chorus_freq_->get();
+    dsp_param_.wet = param_wet_->get();
+    dsp_param_.pre_lowpass = param_pre_lowpass_->get();
+    dsp_param_.pre_highpass = param_pre_highpass_->get();
+    dsp_param_.low_damp_pitch = param_low_damp_pitch_->get();
+    dsp_param_.high_damp_pitch = param_high_damp_pitch_->get();
+    dsp_param_.low_damp_db = param_low_damp_db_->get();
+    dsp_param_.high_damp_db = param_high_damp_db_->get();
+    dsp_param_.size = param_size_->get();
+    dsp_param_.decay_ms = param_decay_ms_->get();
+    dsp_param_.pre_delay = param_predelay_->get();
+    dsp_processor_.update(dsp_state_, dsp_param_);
+
+    dsp_processor_.process(dsp_state_, left_ptr, right_ptr, num_samples);
 }
 
 //==============================================================================
@@ -155,7 +290,9 @@ void EmptyAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     auto plugin_state = juce::ValueTree::fromXml(xml);
     if (plugin_state.isValid()) {
         auto parameter = plugin_state.getChildWithName(kParameterValueTreeIdentify);
-        value_tree_->replaceState(parameter);
+        if (parameter.isValid()) {
+            value_tree_->replaceState(parameter);
+        }
     }
 
     suspendProcessing(false);
