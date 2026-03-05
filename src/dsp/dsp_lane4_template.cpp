@@ -78,8 +78,10 @@ static void Reset(dsp::ProcessorState& state) noexcept {
     for (auto& d : self.decays_) {
         d = simd::BroadcastF128(0);
     }
+
+    const simd::Float128* feedback_delays = (const simd::Float128*)kFeedbackDelays.data();
     for (size_t i = 0; i < self.kContainerSize; ++i) {
-        self.feedback_offsets_[i] = kFeedbackDelays[i];
+        self.feedback_offsets_[i] = feedback_delays[i];
     }
 
     for (auto& buffer : self.allpass_lookups_) {

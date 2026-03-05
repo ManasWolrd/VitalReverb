@@ -78,8 +78,10 @@ static void Reset(dsp::ProcessorState& state) noexcept {
     for (auto& d : self.decays_) {
         d = simd::BroadcastF256(0);
     }
+
+    const simd::Float256* feedback_delays = (const simd::Float256*)kFeedbackDelays.data();
     for (size_t i = 0; i < self.kContainerSize; ++i) {
-        self.feedback_offsets_[i] = kFeedbackDelays[i];
+        self.feedback_offsets_[i] = feedback_delays[i];
     }
 
     for (auto& buffer : self.allpass_lookups_) {
@@ -95,13 +97,13 @@ static void Update(dsp::ProcessorState& state, const dsp::Param& p) noexcept {
 // Float256(Ao0, Ao1) -> Float256(ReduceAdd(Ao0), ReduceAdd(Ao1))
 static inline simd::Float256 _InternalSum(simd::Float256 x) noexcept {
 #ifdef SIMDE_X86_AVX2_NATIVE
-    simde__m256 t1 = simde_mm256_add_ps(simd::ToSimde(x), simde_mm256_permute_ps(x, _MM_SHUFFLE(2, 3, 0, 1)));
-    simde__m256 y = simde_mm256_add_ps(t1, simde_mm256_permute_ps(t1, _MM_SHUFFLE(1, 0, 3, 2)));
+    simde__m256 t1 = simde_mm256_add_ps(simd::ToSimde(x), simde_mm256_permute_ps(x, SIMDE_MM_SHUFFLE(2, 3, 0, 1)));
+    simde__m256 y = simde_mm256_add_ps(t1, simde_mm256_permute_ps(t1, SIMDE_MM_SHUFFLE(1, 0, 3, 2)));
     return simd::FromSimde(y);
 #else
     simde__m256 sum_v = simd::ToSimde(x);
-    sum_v = simde_mm256_add_ps(sum_v, simde_mm256_shuffle_ps(sum_v, sum_v, _MM_SHUFFLE(1, 0, 3, 2)));
-    sum_v = simde_mm256_add_ps(sum_v, simde_mm256_shuffle_ps(sum_v, sum_v, _MM_SHUFFLE(2, 3, 0, 1)));
+    sum_v = simde_mm256_add_ps(sum_v, simde_mm256_shuffle_ps(sum_v, sum_v, SIMDE_MM_SHUFFLE(1, 0, 3, 2)));
+    sum_v = simde_mm256_add_ps(sum_v, simde_mm256_shuffle_ps(sum_v, sum_v, SIMDE_MM_SHUFFLE(2, 3, 0, 1)));
     return simd::FromSimde(sum_v);
 #endif
 }
