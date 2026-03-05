@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.22.1)
 set(TEAM_NAME ManasWolrd)
 set(PLUGIN_REPO_URL "https://github.com/ManasWolrd/VitalReverb")
 set(PLUGIN_NAME VitalReverb)
-set(PLUGIN_VERSION 0.0.1)
+set(PLUGIN_VERSION 0.2.0)
 set(PLUGIN_BUNDLE_ID "com.ManasWolrd.${PLUGIN_NAME}")
 
 option(BUILD_STANDALONE "Build Standalone plugin format" ON)

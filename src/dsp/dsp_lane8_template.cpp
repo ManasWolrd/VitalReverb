@@ -256,7 +256,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
             auto [ao3, ao4] = simd::Break(allpass_output2);
             auto _total_rows = ao1 + ao2 + ao3 + ao4;
             auto total_rows = simd::Combine(_total_rows, _total_rows);
-            auto sum_all = simd::ReduceAdd(allpass_output1) + simd::ReduceAdd(allpass_output2);
+            auto sum_all = simd::ReduceAdd(allpass_output1 + allpass_output2);
             auto sum_ao01 = _InternalSum(allpass_output1);
             auto sum_ao23 = _InternalSum(allpass_output2);
             write1 = 0.25f * sum_all + allpass_output1 - 0.5f * (sum_ao01 + total_rows);
@@ -305,7 +305,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
             auto [ao3, ao4] = simd::Break(store2);
             auto _total_rows = ao1 + ao2 + ao3 + ao4;
             auto total_rows = simd::Combine(_total_rows, _total_rows);
-            auto sum_all = simd::ReduceAdd(store1) + simd::ReduceAdd(store2);
+            auto sum_all = simd::ReduceAdd(store1 + store2);
             auto sum_ao01 = _InternalSum(store1);
             auto sum_ao23 = _InternalSum(store2);
             feed_forward1 = 0.25f * sum_all + allpass_output1 - 0.5f * (sum_ao01 + total_rows);
