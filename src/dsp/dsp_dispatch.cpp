@@ -14,14 +14,14 @@ ProcessorDsp GetProcessorDsp() noexcept {
 #endif
 
 #if defined(__x86_64__) || defined(_M_X64)
-    // if (simd_detector::is_supported(IS::AVX2)) {
-    //     extern ProcessorDsp dsp_avx2;
-    //     return dsp_avx2;
-    // }
-    // if (simd_detector::is_supported(IS::AVX)) {
-    //     extern ProcessorDsp dsp_avx;
-    //     return dsp_avx;
-    // }
+    if (simd_detector::is_supported(IS::AVX2)) {
+        extern ProcessorDsp dsp_avx2;
+        return dsp_avx2;
+    }
+    if (simd_detector::is_supported(IS::AVX)) {
+        extern ProcessorDsp dsp_avx;
+        return dsp_avx;
+    }
     if (simd_detector::is_supported(IS::SSE4_1)) {
         extern ProcessorDsp dsp_sse4;
         return dsp_sse4;

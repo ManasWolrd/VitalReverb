@@ -32,13 +32,13 @@ static void Init(dsp::ProcessorState& state, float fs) noexcept {
     while (max_feedback_size < base_feedback_size) {
         max_feedback_size *= 2;
     }
-    self.max_feedback_size_ = max_feedback_size;
+    self.max_feedback_size_ = static_cast<int>(max_feedback_size);
     self.feedback_mask_ = self.max_feedback_size_ - 1;
 
     uint32_t each_size = max_feedback_size + kExtraLookupSample;
     self.feedback_memorie_.resize(each_size * kNetworkSize);
     for (int i = 0; i < kNetworkSize; ++i) {
-        self.feedback_ptrs_[i] = &self.feedback_memorie_[i * each_size];
+        self.feedback_ptrs_[static_cast<size_t>(i)] = &self.feedback_memorie_[static_cast<size_t>(i) * each_size];
     }
 
     uint32_t const base_allpass_size = static_cast<uint32_t>(std::ceil(buffer_scale_ratio * (1 << kBaseAllpassBits)));
@@ -46,7 +46,7 @@ static void Init(dsp::ProcessorState& state, float fs) noexcept {
     while (max_allpass_size < base_allpass_size) {
         max_allpass_size *= 2;
     }
-    self.max_allpass_size_ = max_allpass_size;
+    self.max_allpass_size_ = static_cast<int>(max_allpass_size);
     self.poly_allpass_mask_ = self.max_allpass_size_ - 1;
     for (auto& buffer : self.allpass_lookups_) {
         buffer.resize(static_cast<size_t>(max_allpass_size));
@@ -179,7 +179,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         current_chorus_real[i] = std::cos(container_phase[i]);
     }
     for (size_t i = 0; i < 4; ++i) {
-        current_chorus_imaginary[i] = std::cos(container_phase[i]);
+        current_chorus_imaginary[i] = std::sin(container_phase[i]);
     }
 
     const simd::Float128* feedback_delays = (const simd::Float128*)kFeedbackDelays.data();
@@ -211,7 +211,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
     auto feedback_offset3 = self.feedback_offsets_[2];
     auto feedback_offset4 = self.feedback_offsets_[3];
 
-    for (size_t i = 0; i < num_samples; ++i) {
+    for (int i = 0; i < num_samples; ++i) {
         // paralle chorus delaylines
         current_chorus_amount += delta_chorus_amount;
         current_chorus_real =
@@ -227,10 +227,10 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         feedback_offset3 += (self.feedback_offset_smooth_factor_) * (new_feedback_offset3 - feedback_offset3);
         feedback_offset4 += (self.feedback_offset_smooth_factor_) * (new_feedback_offset4 - feedback_offset4);
 
-        auto feedback_read2 = self.ReadFeedback(1, feedback_offset2);
         auto feedback_read1 = self.ReadFeedback(0, feedback_offset1);
-        auto feedback_read4 = self.ReadFeedback(3, feedback_offset4);
+        auto feedback_read2 = self.ReadFeedback(1, feedback_offset2);
         auto feedback_read3 = self.ReadFeedback(2, feedback_offset3);
+        auto feedback_read4 = self.ReadFeedback(3, feedback_offset4);
 
         simd::Float128 input{left[i], right[i], left[i], right[i]};
         auto filtered_input = self.high_pre_filter_.TickLowpass(input, current_high_pre_coefficient);
@@ -260,11 +260,15 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         auto allpass_output4 = allpass_read4 + allpass_delay_input4 * kAllpassFeedback;
 
         // scatter matrix
+        // write1 = 0.25 * Sum(All) + Ao0 - 0.5 * Sum(Ao0) - 0.5 * (Ao0 + Ao1 + Ao2 + Ao3)
+        // write2 = 0.25 * Sum(All) + Ao1 - 0.5 * Sum(Ao1) - 0.5 * (Ao0 + Ao1 + Ao2 + Ao3)
+        // write3 = 0.25 * Sum(All) + Ao2 - 0.5 * Sum(Ao2) - 0.5 * (Ao0 + Ao1 + Ao2 + Ao3)
+        // write4 = 0.25 * Sum(All) + Ao3 - 0.5 * Sum(Ao3) - 0.5 * (Ao0 + Ao1 + Ao2 + Ao3)
         auto total_rows = allpass_output1 + allpass_output2 + allpass_output3 + allpass_output4;
         auto other_feedback = total_rows * (-0.5f) + (simd::ReduceAdd(total_rows) * 0.25f);
 
-        auto write2 = other_feedback + allpass_output2;
         auto write1 = other_feedback + allpass_output1;
+        auto write2 = other_feedback + allpass_output2;
         auto write3 = other_feedback + allpass_output3;
         auto write4 = other_feedback + allpass_output4;
 
@@ -321,7 +325,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         self.feedback_ptrs_[14][self.write_index_] = store4[2];
         self.feedback_ptrs_[15][self.write_index_] = store4[3];
 
-        // what is this?
+        // scatter matrix
         auto total_allpass = store1 + store2 + store3 + store4;
         auto other_feedback_allpass = total_allpass * (-0.5f) + (simd::ReduceAdd(total_allpass) * 0.25f);
 
