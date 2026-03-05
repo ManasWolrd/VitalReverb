@@ -93,15 +93,16 @@ static void Update(dsp::ProcessorState& state, const dsp::Param& p) noexcept {
 }
 
 // Float256(Ao0, Ao1) -> Float256(ReduceAdd(Ao0), ReduceAdd(Ao1))
-static inline __m256 _InternalSum(__m256 x) noexcept {
+static inline simd::Float256 _InternalSum(simd::Float256 x) noexcept {
 #ifdef SIMDE_X86_AVX2_NATIVE
-    __m256 t1 = _mm256_add_ps(x, _mm256_permute_ps(x, _MM_SHUFFLE(2, 3, 0, 1)));
-    return _mm256_add_ps(t1, _mm256_permute_ps(t1, _MM_SHUFFLE(1, 0, 3, 2)));
+    simde__m256 t1 = simde_mm256_add_ps(simd::ToSimde(x), simde_mm256_permute_ps(x, _MM_SHUFFLE(2, 3, 0, 1)));
+    simde__m256 y = simde_mm256_add_ps(t1, simde_mm256_permute_ps(t1, _MM_SHUFFLE(1, 0, 3, 2)));
+    return simd::FromSimde(y);
 #else
-    __m256 sum_v = x;
-    sum_v = _mm256_add_ps(sum_v, _mm256_shuffle_ps(sum_v, sum_v, _MM_SHUFFLE(1, 0, 3, 2)));
-    sum_v = _mm256_add_ps(sum_v, _mm256_shuffle_ps(sum_v, sum_v, _MM_SHUFFLE(2, 3, 0, 1)));
-    return sum_v;
+    simde__m256 sum_v = simd::ToSimde(x);
+    sum_v = simde_mm256_add_ps(sum_v, simde_mm256_shuffle_ps(sum_v, sum_v, _MM_SHUFFLE(1, 0, 3, 2)));
+    sum_v = simde_mm256_add_ps(sum_v, simde_mm256_shuffle_ps(sum_v, sum_v, _MM_SHUFFLE(2, 3, 0, 1)));
+    return simd::FromSimde(sum_v);
 #endif
 }
 
@@ -230,8 +231,8 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         auto feedback_read2 = self.ReadFeedback(1, feedback_offset2);
 
         simd::Float128 input{left[i], right[i], left[i], right[i]};
-        auto filtered_input = self.high_pre_filter_.TickLowpass(input, current_high_pre_coefficient);
-        filtered_input = self.low_pre_filter_.TickLowpass(input, current_low_pre_coefficient) - filtered_input;
+        auto filtered_input = self.high_pre_filter_.TickLowpass(input, simd::BroadcastF128(current_high_pre_coefficient));
+        filtered_input = self.low_pre_filter_.TickLowpass(input, simd::BroadcastF128(current_low_pre_coefficient)) - filtered_input;
         auto scaled_input = simd::Combine(filtered_input, filtered_input) * 0.5f;
 
         // paralle polyphase allpass
@@ -264,13 +265,13 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         }
 
         // damp filter
-        auto high_filtered1 = self.high_shelf_filters_[0].TickLowpass(write1, current_high_coefficient);
-        auto high_filtered2 = self.high_shelf_filters_[1].TickLowpass(write2, current_high_coefficient);
+        auto high_filtered1 = self.high_shelf_filters_[0].TickLowpass(write1, simd::BroadcastF256(current_high_coefficient));
+        auto high_filtered2 = self.high_shelf_filters_[1].TickLowpass(write2, simd::BroadcastF256(current_high_coefficient));
         write1 = high_filtered1 + (current_high_amplitude) * (write1 - high_filtered1);
         write2 = high_filtered2 + (current_high_amplitude) * (write2 - high_filtered2);
 
-        auto low_filtered1 = self.low_shelf_filters_[0].TickLowpass(write1, current_low_coefficient);
-        auto low_filtered2 = self.low_shelf_filters_[1].TickLowpass(write2, current_low_coefficient);
+        auto low_filtered1 = self.low_shelf_filters_[0].TickLowpass(write1, simd::BroadcastF256(current_low_coefficient));
+        auto low_filtered2 = self.low_shelf_filters_[1].TickLowpass(write2, simd::BroadcastF256(current_low_coefficient));
         write1 -= low_filtered1 * (current_low_amplitude);
         write2 -= low_filtered2 * (current_low_amplitude);
 

@@ -233,8 +233,8 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         auto feedback_read4 = self.ReadFeedback(3, feedback_offset4);
 
         simd::Float128 input{left[i], right[i], left[i], right[i]};
-        auto filtered_input = self.high_pre_filter_.TickLowpass(input, current_high_pre_coefficient);
-        filtered_input = self.low_pre_filter_.TickLowpass(input, current_low_pre_coefficient) - filtered_input;
+        auto filtered_input = self.high_pre_filter_.TickLowpass(input, simd::BroadcastF128(current_high_pre_coefficient));
+        filtered_input = self.low_pre_filter_.TickLowpass(input, simd::BroadcastF128(current_low_pre_coefficient)) - filtered_input;
         auto scaled_input = filtered_input * 0.5f;
 
         // paralle polyphase allpass
@@ -280,19 +280,19 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         write4 += adjacent_feedback[3];
 
         // damp filter
-        auto high_filtered1 = self.high_shelf_filters_[0].TickLowpass(write1, current_high_coefficient);
-        auto high_filtered2 = self.high_shelf_filters_[1].TickLowpass(write2, current_high_coefficient);
-        auto high_filtered3 = self.high_shelf_filters_[2].TickLowpass(write3, current_high_coefficient);
-        auto high_filtered4 = self.high_shelf_filters_[3].TickLowpass(write4, current_high_coefficient);
+        auto high_filtered1 = self.high_shelf_filters_[0].TickLowpass(write1, simd::BroadcastF128(current_high_coefficient));
+        auto high_filtered2 = self.high_shelf_filters_[1].TickLowpass(write2, simd::BroadcastF128(current_high_coefficient));
+        auto high_filtered3 = self.high_shelf_filters_[2].TickLowpass(write3, simd::BroadcastF128(current_high_coefficient));
+        auto high_filtered4 = self.high_shelf_filters_[3].TickLowpass(write4, simd::BroadcastF128(current_high_coefficient));
         write1 = high_filtered1 + (current_high_amplitude) * (write1 - high_filtered1);
         write2 = high_filtered2 + (current_high_amplitude) * (write2 - high_filtered2);
         write3 = high_filtered3 + (current_high_amplitude) * (write3 - high_filtered3);
         write4 = high_filtered4 + (current_high_amplitude) * (write4 - high_filtered4);
 
-        auto low_filtered1 = self.low_shelf_filters_[0].TickLowpass(write1, current_low_coefficient);
-        auto low_filtered2 = self.low_shelf_filters_[1].TickLowpass(write2, current_low_coefficient);
-        auto low_filtered3 = self.low_shelf_filters_[2].TickLowpass(write3, current_low_coefficient);
-        auto low_filtered4 = self.low_shelf_filters_[3].TickLowpass(write4, current_low_coefficient);
+        auto low_filtered1 = self.low_shelf_filters_[0].TickLowpass(write1, simd::BroadcastF128(current_low_coefficient));
+        auto low_filtered2 = self.low_shelf_filters_[1].TickLowpass(write2, simd::BroadcastF128(current_low_coefficient));
+        auto low_filtered3 = self.low_shelf_filters_[2].TickLowpass(write3, simd::BroadcastF128(current_low_coefficient));
+        auto low_filtered4 = self.low_shelf_filters_[3].TickLowpass(write4, simd::BroadcastF128(current_low_coefficient));
         write1 -= low_filtered1 * (current_low_amplitude);
         write2 -= low_filtered2 * (current_low_amplitude);
         write3 -= low_filtered3 * (current_low_amplitude);
