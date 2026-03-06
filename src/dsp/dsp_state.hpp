@@ -175,7 +175,7 @@ struct LaneNState {
 #else
         simde__m256i lane_ids = simde_mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
         simde__m256i base_vindex = simde_mm256_add_epi32(
-            simde_mm256_slli_epi32(irpos, 4), simde_mm256_add_epi32(simde_mm256_set1_epi32(idx * 8), lane_ids));
+            simde_mm256_slli_epi32(simd::ToSimde(irpos), 4), simde_mm256_add_epi32(simde_mm256_set1_epi32(idx * 8), lane_ids));
 
         float const* raw = feedback_memorie_.data();
         auto yn1 = simd::FromSimde(simde_mm256_i32gather_ps(raw, base_vindex, 4));
@@ -258,8 +258,8 @@ struct LaneNState {
 #else
         size_t offset = write_index_ * 16;
         float* ptr = feedback_memorie_.data() + offset;
-        simde_mm256_store_ps(ptr, store1);
-        simde_mm256_store_ps(ptr + 8, store2);
+        simde_mm256_store_ps(ptr, simd::ToSimde(store1));
+        simde_mm256_store_ps(ptr + 8, simd::ToSimde(store2));
         // feedback_memorie_[write_index_ * 16 + 0] = store1[0];
         // feedback_memorie_[write_index_ * 16 + 1] = store1[1];
         // feedback_memorie_[write_index_ * 16 + 2] = store1[2];
@@ -301,9 +301,9 @@ struct LaneNState {
 #else
         static const int32_t lane_offsets_data[8] = {0, 1, 2, 3, 4, 5, 6, 7};
         simde__m256i lane_offsets = simde_mm256_loadu_si256(lane_offsets_data);
-        simde__m256i vindex = simde_mm256_add_epi32(simde_mm256_slli_epi32(irpos, 3), lane_offsets);
+        simde__m256i vindex = simde_mm256_add_epi32(simde_mm256_slli_epi32(simd::ToSimde(irpos), 3), lane_offsets);
         float const* raw = reinterpret_cast<const float*>(buffer.data());
-        return simde_mm256_i32gather_ps(raw, vindex, 4);
+        return simd::FromSimde(simde_mm256_i32gather_ps(raw, vindex, 4));
 #endif
     }
 };
