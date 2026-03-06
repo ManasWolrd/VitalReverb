@@ -108,6 +108,20 @@ static inline simd::Float256 _InternalSum(simd::Float256 x) noexcept {
 #endif
 }
 
+static inline void _ScatterLane8(simd::Float256 in1, simd::Float256 in2, simd::Float256& out1,
+                                 simd::Float256& out2) noexcept {
+    auto [ao1, ao2] = simd::Break(in1);
+    auto [ao3, ao4] = simd::Break(in2);
+    auto row_sum = ao1 + ao2 + ao3 + ao4;
+    auto total_rows = simd::Combine(row_sum, row_sum);
+    auto sum_all = simd::ReduceAdd(in1 + in2);
+    auto sum_ao01 = _InternalSum(in1);
+    auto sum_ao23 = _InternalSum(in2);
+    auto common = 0.25f * sum_all;
+    out1 = common + in1 - 0.5f * (sum_ao01 + total_rows);
+    out2 = common + in2 - 0.5f * (sum_ao23 + total_rows);
+}
+
 static void Process(dsp::ProcessorState& state, float* left, float* right, int num_samples) noexcept {
     auto& self = state.lane8;
     const auto& param = state.param;
@@ -214,27 +228,31 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
 
     auto feedback_offset1 = self.feedback_offsets_[0];
     auto feedback_offset2 = self.feedback_offsets_[1];
+    float const feedback_smooth = self.feedback_offset_smooth_factor_;
 
     for (int i = 0; i < num_samples; ++i) {
         // paralle chorus delaylines
         current_chorus_amount += delta_chorus_amount;
+        auto const prev_chorus_real = current_chorus_real;
         current_chorus_real =
-            current_chorus_real * chorus_increment_real - current_chorus_imaginary * chorus_increment_imaginary;
+            prev_chorus_real * chorus_increment_real - current_chorus_imaginary * chorus_increment_imaginary;
         current_chorus_imaginary =
-            current_chorus_imaginary * chorus_increment_real + current_chorus_real * chorus_increment_imaginary;
+            current_chorus_imaginary * chorus_increment_real + prev_chorus_real * chorus_increment_imaginary;
         auto new_feedback_offset1 =
             delay1 + simd::Combine(current_chorus_real, -current_chorus_real) * current_chorus_amount;
         auto new_feedback_offset2 =
             delay2 + simd::Combine(current_chorus_imaginary, -current_chorus_imaginary) * current_chorus_amount;
-        feedback_offset1 += (self.feedback_offset_smooth_factor_) * (new_feedback_offset1 - feedback_offset1);
-        feedback_offset2 += (self.feedback_offset_smooth_factor_) * (new_feedback_offset2 - feedback_offset2);
+        feedback_offset1 += feedback_smooth * (new_feedback_offset1 - feedback_offset1);
+        feedback_offset2 += feedback_smooth * (new_feedback_offset2 - feedback_offset2);
 
         auto feedback_read1 = self.ReadFeedback(0, feedback_offset1);
         auto feedback_read2 = self.ReadFeedback(1, feedback_offset2);
 
         simd::Float128 input{left[i], right[i], left[i], right[i]};
-        auto filtered_input = self.high_pre_filter_.TickLowpass(input, simd::BroadcastF128(current_high_pre_coefficient));
-        filtered_input = self.low_pre_filter_.TickLowpass(input, simd::BroadcastF128(current_low_pre_coefficient)) - filtered_input;
+        auto pre_high_coeff_v = simd::BroadcastF128(current_high_pre_coefficient);
+        auto pre_low_coeff_v = simd::BroadcastF128(current_low_pre_coefficient);
+        auto filtered_input = self.high_pre_filter_.TickLowpass(input, pre_high_coeff_v);
+        filtered_input = self.low_pre_filter_.TickLowpass(input, pre_low_coeff_v) - filtered_input;
         auto scaled_input = simd::Combine(filtered_input, filtered_input) * 0.5f;
 
         // paralle polyphase allpass
@@ -254,26 +272,18 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         // scatter matrix
         simd::Float256 write1;
         simd::Float256 write2;
-        {
-            auto [ao1, ao2] = simd::Break(allpass_output1);
-            auto [ao3, ao4] = simd::Break(allpass_output2);
-            auto _total_rows = ao1 + ao2 + ao3 + ao4;
-            auto total_rows = simd::Combine(_total_rows, _total_rows);
-            auto sum_all = simd::ReduceAdd(allpass_output1 + allpass_output2);
-            auto sum_ao01 = _InternalSum(allpass_output1);
-            auto sum_ao23 = _InternalSum(allpass_output2);
-            write1 = 0.25f * sum_all + allpass_output1 - 0.5f * (sum_ao01 + total_rows);
-            write2 = 0.25f * sum_all + allpass_output2 - 0.5f * (sum_ao23 + total_rows);
-        }
+        _ScatterLane8(allpass_output1, allpass_output2, write1, write2);
 
         // damp filter
-        auto high_filtered1 = self.high_shelf_filters_[0].TickLowpass(write1, simd::BroadcastF256(current_high_coefficient));
-        auto high_filtered2 = self.high_shelf_filters_[1].TickLowpass(write2, simd::BroadcastF256(current_high_coefficient));
+        auto high_coeff_v = simd::BroadcastF256(current_high_coefficient);
+        auto low_coeff_v = simd::BroadcastF256(current_low_coefficient);
+        auto high_filtered1 = self.high_shelf_filters_[0].TickLowpass(write1, high_coeff_v);
+        auto high_filtered2 = self.high_shelf_filters_[1].TickLowpass(write2, high_coeff_v);
         write1 = high_filtered1 + (current_high_amplitude) * (write1 - high_filtered1);
         write2 = high_filtered2 + (current_high_amplitude) * (write2 - high_filtered2);
 
-        auto low_filtered1 = self.low_shelf_filters_[0].TickLowpass(write1, simd::BroadcastF256(current_low_coefficient));
-        auto low_filtered2 = self.low_shelf_filters_[1].TickLowpass(write2, simd::BroadcastF256(current_low_coefficient));
+        auto low_filtered1 = self.low_shelf_filters_[0].TickLowpass(write1, low_coeff_v);
+        auto low_filtered2 = self.low_shelf_filters_[1].TickLowpass(write2, low_coeff_v);
         write1 -= low_filtered1 * (current_low_amplitude);
         write2 -= low_filtered2 * (current_low_amplitude);
 
@@ -283,37 +293,29 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         auto store1 = current_decay1 * write1;
         auto store2 = current_decay2 * write2;
         self.write_index_ = (self.write_index_ + 1) & self.feedback_mask_;
-        self.feedback_ptrs_[0][self.write_index_] = store1[0];
-        self.feedback_ptrs_[1][self.write_index_] = store1[1];
-        self.feedback_ptrs_[2][self.write_index_] = store1[2];
-        self.feedback_ptrs_[3][self.write_index_] = store1[3];
-        self.feedback_ptrs_[4][self.write_index_] = store1[4];
-        self.feedback_ptrs_[5][self.write_index_] = store1[5];
-        self.feedback_ptrs_[6][self.write_index_] = store1[6];
-        self.feedback_ptrs_[7][self.write_index_] = store1[7];
-        self.feedback_ptrs_[8][self.write_index_] = store2[0];
-        self.feedback_ptrs_[9][self.write_index_] = store2[1];
-        self.feedback_ptrs_[10][self.write_index_] = store2[2];
-        self.feedback_ptrs_[11][self.write_index_] = store2[3];
-        self.feedback_ptrs_[12][self.write_index_] = store2[4];
-        self.feedback_ptrs_[13][self.write_index_] = store2[5];
-        self.feedback_ptrs_[14][self.write_index_] = store2[6];
-        self.feedback_ptrs_[15][self.write_index_] = store2[7];
+        int const write_idx = self.write_index_;
+        auto* const ptrs = self.feedback_ptrs_.data();
+        ptrs[0][write_idx] = store1[0];
+        ptrs[1][write_idx] = store1[1];
+        ptrs[2][write_idx] = store1[2];
+        ptrs[3][write_idx] = store1[3];
+        ptrs[4][write_idx] = store1[4];
+        ptrs[5][write_idx] = store1[5];
+        ptrs[6][write_idx] = store1[6];
+        ptrs[7][write_idx] = store1[7];
+        ptrs[8][write_idx] = store2[0];
+        ptrs[9][write_idx] = store2[1];
+        ptrs[10][write_idx] = store2[2];
+        ptrs[11][write_idx] = store2[3];
+        ptrs[12][write_idx] = store2[4];
+        ptrs[13][write_idx] = store2[5];
+        ptrs[14][write_idx] = store2[6];
+        ptrs[15][write_idx] = store2[7];
 
         // scatter matrix
         simd::Float256 feed_forward1;
         simd::Float256 feed_forward2;
-        {
-            auto [ao1, ao2] = simd::Break(store1);
-            auto [ao3, ao4] = simd::Break(store2);
-            auto _total_rows = ao1 + ao2 + ao3 + ao4;
-            auto total_rows = simd::Combine(_total_rows, _total_rows);
-            auto sum_all = simd::ReduceAdd(store1 + store2);
-            auto sum_ao01 = _InternalSum(store1);
-            auto sum_ao23 = _InternalSum(store2);
-            feed_forward1 = 0.25f * sum_all + allpass_output1 - 0.5f * (sum_ao01 + total_rows);
-            feed_forward2 = 0.25f * sum_all + allpass_output2 - 0.5f * (sum_ao23 + total_rows);
-        }
+        _ScatterLane8(store1, store2, feed_forward1, feed_forward2);
 
         // predelay
         auto total = write1 + write2;

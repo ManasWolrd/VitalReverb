@@ -165,18 +165,33 @@ struct LaneNState {
         auto& buffer = allpass_lookups_[i];
         auto irpos = (allpass_write_pos_ + poly_allpass_mask_) - offset;
         irpos &= (poly_allpass_mask_);
-        return simd::Float128{buffer[static_cast<size_t>(irpos[0])][0], buffer[static_cast<size_t>(irpos[1])][1],
-                              buffer[static_cast<size_t>(irpos[2])][2], buffer[static_cast<size_t>(irpos[3])][3]};
+        auto const* raw = reinterpret_cast<const float*>(buffer.data());
+        return simd::Float128{raw[static_cast<size_t>(irpos[0]) * 4 + 0], raw[static_cast<size_t>(irpos[1]) * 4 + 1],
+                              raw[static_cast<size_t>(irpos[2]) * 4 + 2], raw[static_cast<size_t>(irpos[3]) * 4 + 3]};
     }
 
     simd::Float256 ReadAllpass(size_t i, simd::Int256 offset) noexcept {
         auto& buffer = allpass_lookups_[i];
         auto irpos = (allpass_write_pos_ + poly_allpass_mask_) - offset;
         irpos &= (poly_allpass_mask_);
-        return simd::Float256{buffer[static_cast<size_t>(irpos[0])][0], buffer[static_cast<size_t>(irpos[1])][1],
-                              buffer[static_cast<size_t>(irpos[2])][2], buffer[static_cast<size_t>(irpos[3])][3],
-                              buffer[static_cast<size_t>(irpos[4])][4], buffer[static_cast<size_t>(irpos[5])][5],
-                              buffer[static_cast<size_t>(irpos[6])][6], buffer[static_cast<size_t>(irpos[7])][7]};
+#ifndef SIMDE_X86_AVX2_NATIVE
+        auto const* raw = reinterpret_cast<const float*>(buffer.data());
+        return simd::Float256{raw[static_cast<size_t>(irpos[0]) * 8 + 0], raw[static_cast<size_t>(irpos[1]) * 8 + 1],
+                              raw[static_cast<size_t>(irpos[2]) * 8 + 2], raw[static_cast<size_t>(irpos[3]) * 8 + 3],
+                              raw[static_cast<size_t>(irpos[4]) * 8 + 4], raw[static_cast<size_t>(irpos[5]) * 8 + 5],
+                              raw[static_cast<size_t>(irpos[6]) * 8 + 6], raw[static_cast<size_t>(irpos[7]) * 8 + 7]};
+#else
+        static const int32_t lane_offsets_data[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+        simde__m256i lane_offsets = simde_mm256_loadu_si256(lane_offsets_data);
+        
+        // vindex = irpos << 3 (即 * 8) + lane_offsets
+        simde__m256i vindex = simde_mm256_add_epi32(simde_mm256_slli_epi32(irpos, 3), lane_offsets);
+
+        // 3. 执行 Gather
+        // scale = 4，因为我们读的是 float (4 bytes)
+        float const* raw = reinterpret_cast<const float*>(buffer.data());
+        return simde_mm256_i32gather_ps(raw, vindex, 4);
+#endif
     }
 };
 
