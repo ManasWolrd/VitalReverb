@@ -6,6 +6,7 @@
 #include "pluginshared/dsp/delay_line_single.hpp"
 #include "pluginshared/dsp/one_pole_tpt.hpp"
 #include "pluginshared/simd.hpp"
+#include "pluginshared/align_allocator.hpp"
 
 namespace dsp {
 
@@ -72,7 +73,7 @@ struct LaneNState {
 
     simd::Array<std::vector<SimdT>, kContainerSize> allpass_lookups_{};
 
-    std::vector<float> feedback_memorie_;
+    std::vector<float, simd::AlignedAllocator<float, 32>> feedback_memorie_;
     std::array<float*, kNetworkSize> feedback_ptrs_{};
     simd::Array<SimdT, kContainerSize> feedback_offsets_{};
 
@@ -123,7 +124,7 @@ struct LaneNState {
         float* dst = feedback_memorie_.data() + raw_offset;
         float* src = feedback_memorie_.data();
         for (int i = 0; i < kNetworkSize / 8 * 4; ++i) {
-            simde_mm256_storeu_ps(dst, simde_mm256_loadu_ps(src));
+            simde_mm256_store_ps(dst, simde_mm256_load_ps(src));
             src += 8;
             dst += 8;
         }
@@ -172,8 +173,7 @@ struct LaneNState {
         auto m1 = d0 - (2.0f) * d + d1;
         return y0 + t * (d0 + t * (m0 + t * m1));
 #else
-        static const int32_t lane_ids_data[8] = {0, 1, 2, 3, 4, 5, 6, 7};
-        simde__m256i lane_ids = simde_mm256_loadu_si256(lane_ids_data);
+        simde__m256i lane_ids = simde_mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
         simde__m256i base_vindex = simde_mm256_add_epi32(
             simde_mm256_slli_epi32(irpos, 4), simde_mm256_add_epi32(simde_mm256_set1_epi32(idx * 8), lane_ids));
 
@@ -258,8 +258,8 @@ struct LaneNState {
 #else
         size_t offset = write_index_ * 16;
         float* ptr = feedback_memorie_.data() + offset;
-        simde_mm256_storeu_ps(ptr, store1);
-        simde_mm256_storeu_ps(ptr + 8, store2);
+        simde_mm256_store_ps(ptr, store1);
+        simde_mm256_store_ps(ptr + 8, store2);
         // feedback_memorie_[write_index_ * 16 + 0] = store1[0];
         // feedback_memorie_[write_index_ * 16 + 1] = store1[1];
         // feedback_memorie_[write_index_ * 16 + 2] = store1[2];
