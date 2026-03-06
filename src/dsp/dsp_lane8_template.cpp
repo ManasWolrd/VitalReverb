@@ -293,24 +293,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         auto store1 = current_decay1 * write1;
         auto store2 = current_decay2 * write2;
         self.write_index_ = (self.write_index_ + 1) & self.feedback_mask_;
-        int const write_idx = self.write_index_;
-        auto* const ptrs = self.feedback_ptrs_.data();
-        ptrs[0][write_idx] = store1[0];
-        ptrs[1][write_idx] = store1[1];
-        ptrs[2][write_idx] = store1[2];
-        ptrs[3][write_idx] = store1[3];
-        ptrs[4][write_idx] = store1[4];
-        ptrs[5][write_idx] = store1[5];
-        ptrs[6][write_idx] = store1[6];
-        ptrs[7][write_idx] = store1[7];
-        ptrs[8][write_idx] = store2[0];
-        ptrs[9][write_idx] = store2[1];
-        ptrs[10][write_idx] = store2[2];
-        ptrs[11][write_idx] = store2[3];
-        ptrs[12][write_idx] = store2[4];
-        ptrs[13][write_idx] = store2[5];
-        ptrs[14][write_idx] = store2[6];
-        ptrs[15][write_idx] = store2[7];
+        self.PushFeedback(store1, store2);
 
         // scatter matrix
         simd::Float256 feed_forward1;

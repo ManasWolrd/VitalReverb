@@ -111,12 +111,23 @@ struct LaneNState {
     float buffer_scale_ratio_{};
 
     void WarpBuffer() noexcept {
+#ifndef SIMDE_X86_AVX2_NATIVE
         for (auto ptr : feedback_ptrs_) {
             ptr[max_feedback_size_] = ptr[0];
             ptr[max_feedback_size_ + 1] = ptr[1];
             ptr[max_feedback_size_ + 2] = ptr[2];
             ptr[max_feedback_size_ + 3] = ptr[3];
         }
+#else
+        size_t raw_offset = max_feedback_size_ * kNetworkSize;
+        float* dst = feedback_memorie_.data() + raw_offset;
+        float* src = feedback_memorie_.data();
+        for (int i = 0; i < kNetworkSize / 8 * 4; ++i) {
+            simde_mm256_storeu_ps(dst, simde_mm256_loadu_ps(src));
+            src += 8;
+            dst += 8;
+        }
+#endif
     }
 
     simd::Float128 ReadFeedback(size_t idx, simd::Float128 offset) noexcept {
@@ -143,6 +154,7 @@ struct LaneNState {
         auto irpos = (simd::ToInt256(rpos) - 1) & feedback_mask_;
         simd::Float256 t = simd::Frac256(rpos);
 
+#ifndef SIMDE_X86_AVX2_NATIVE
         // load [-1, 0, 1, 2]
         auto [yn1, y0, y1, y2] = simd::Transpose256(simd::Loadu128(feedback_ptrs_[idx * 8] + irpos[0]),
                                                     simd::Loadu128(feedback_ptrs_[idx * 8 + 1] + irpos[1]),
@@ -159,6 +171,112 @@ struct LaneNState {
         auto m0 = (3.0f) * d - (2.0f) * d0 - d1;
         auto m1 = d0 - (2.0f) * d + d1;
         return y0 + t * (d0 + t * (m0 + t * m1));
+#else
+        static const int32_t lane_ids_data[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+        simde__m256i lane_ids = simde_mm256_loadu_si256(lane_ids_data);
+        simde__m256i base_vindex = simde_mm256_add_epi32(
+            simde_mm256_slli_epi32(irpos, 4), simde_mm256_add_epi32(simde_mm256_set1_epi32(idx * 8), lane_ids));
+
+        float const* raw = feedback_memorie_.data();
+        auto yn1 = simd::FromSimde(simde_mm256_i32gather_ps(raw, base_vindex, 4));
+        auto y0 = simd::FromSimde(
+            simde_mm256_i32gather_ps(raw, simde_mm256_add_epi32(base_vindex, simde_mm256_set1_epi32(16)), 4));
+        auto y1 = simd::FromSimde(
+            simde_mm256_i32gather_ps(raw, simde_mm256_add_epi32(base_vindex, simde_mm256_set1_epi32(32)), 4));
+        auto y2 = simd::FromSimde(
+            simde_mm256_i32gather_ps(raw, simde_mm256_add_epi32(base_vindex, simde_mm256_set1_epi32(48)), 4));
+
+        // simd::Float256 yn1;
+        // yn1[0] = feedback_memorie_[irpos[0] * 16 + idx * 8 + 0];
+        // yn1[1] = feedback_memorie_[irpos[1] * 16 + idx * 8 + 1];
+        // yn1[2] = feedback_memorie_[irpos[2] * 16 + idx * 8 + 2];
+        // yn1[3] = feedback_memorie_[irpos[3] * 16 + idx * 8 + 3];
+        // yn1[4] = feedback_memorie_[irpos[4] * 16 + idx * 8 + 4];
+        // yn1[5] = feedback_memorie_[irpos[5] * 16 + idx * 8 + 5];
+        // yn1[6] = feedback_memorie_[irpos[6] * 16 + idx * 8 + 6];
+        // yn1[7] = feedback_memorie_[irpos[7] * 16 + idx * 8 + 7];
+
+        // simd::Float256 y0;
+        // y0[0] = feedback_memorie_[irpos[0] * 16 + 16 + idx * 8 + 0];
+        // y0[1] = feedback_memorie_[irpos[1] * 16 + 16 + idx * 8 + 1];
+        // y0[2] = feedback_memorie_[irpos[2] * 16 + 16 + idx * 8 + 2];
+        // y0[3] = feedback_memorie_[irpos[3] * 16 + 16 + idx * 8 + 3];
+        // y0[4] = feedback_memorie_[irpos[4] * 16 + 16 + idx * 8 + 4];
+        // y0[5] = feedback_memorie_[irpos[5] * 16 + 16 + idx * 8 + 5];
+        // y0[6] = feedback_memorie_[irpos[6] * 16 + 16 + idx * 8 + 6];
+        // y0[7] = feedback_memorie_[irpos[7] * 16 + 16 + idx * 8 + 7];
+
+        // simd::Float256 y1;
+        // y1[0] = feedback_memorie_[irpos[0] * 16 + 32 + idx * 8 + 0];
+        // y1[1] = feedback_memorie_[irpos[1] * 16 + 32 + idx * 8 + 1];
+        // y1[2] = feedback_memorie_[irpos[2] * 16 + 32 + idx * 8 + 2];
+        // y1[3] = feedback_memorie_[irpos[3] * 16 + 32 + idx * 8 + 3];
+        // y1[4] = feedback_memorie_[irpos[4] * 16 + 32 + idx * 8 + 4];
+        // y1[5] = feedback_memorie_[irpos[5] * 16 + 32 + idx * 8 + 5];
+        // y1[6] = feedback_memorie_[irpos[6] * 16 + 32 + idx * 8 + 6];
+        // y1[7] = feedback_memorie_[irpos[7] * 16 + 32 + idx * 8 + 7];
+
+        // simd::Float256 y2;
+        // y2[0] = feedback_memorie_[irpos[0] * 16 + 48 + idx * 8 + 0];
+        // y2[1] = feedback_memorie_[irpos[1] * 16 + 48 + idx * 8 + 1];
+        // y2[2] = feedback_memorie_[irpos[2] * 16 + 48 + idx * 8 + 2];
+        // y2[3] = feedback_memorie_[irpos[3] * 16 + 48 + idx * 8 + 3];
+        // y2[4] = feedback_memorie_[irpos[4] * 16 + 48 + idx * 8 + 4];
+        // y2[5] = feedback_memorie_[irpos[5] * 16 + 48 + idx * 8 + 5];
+        // y2[6] = feedback_memorie_[irpos[6] * 16 + 48 + idx * 8 + 6];
+        // y2[7] = feedback_memorie_[irpos[7] * 16 + 48 + idx * 8 + 7];
+
+        auto d0 = (y1 - yn1) * (0.5f);
+        auto d1 = (y2 - y0) * (0.5f);
+        auto d = y1 - y0;
+        auto m0 = (3.0f) * d - (2.0f) * d0 - d1;
+        auto m1 = d0 - (2.0f) * d + d1;
+        return y0 + t * (d0 + t * (m0 + t * m1));
+#endif
+    }
+
+    void PushFeedback(simd::Float256 store1, simd::Float256 store2) noexcept {
+#ifndef SIMDE_X86_AVX2_NATIVE
+        int const write_idx = write_index_;
+        auto* const ptrs = feedback_ptrs_.data();
+        ptrs[0][write_idx] = store1[0];
+        ptrs[1][write_idx] = store1[1];
+        ptrs[2][write_idx] = store1[2];
+        ptrs[3][write_idx] = store1[3];
+        ptrs[4][write_idx] = store1[4];
+        ptrs[5][write_idx] = store1[5];
+        ptrs[6][write_idx] = store1[6];
+        ptrs[7][write_idx] = store1[7];
+        ptrs[8][write_idx] = store2[0];
+        ptrs[9][write_idx] = store2[1];
+        ptrs[10][write_idx] = store2[2];
+        ptrs[11][write_idx] = store2[3];
+        ptrs[12][write_idx] = store2[4];
+        ptrs[13][write_idx] = store2[5];
+        ptrs[14][write_idx] = store2[6];
+        ptrs[15][write_idx] = store2[7];
+#else
+        size_t offset = write_index_ * 16;
+        float* ptr = feedback_memorie_.data() + offset;
+        simde_mm256_storeu_ps(ptr, store1);
+        simde_mm256_storeu_ps(ptr + 8, store2);
+        // feedback_memorie_[write_index_ * 16 + 0] = store1[0];
+        // feedback_memorie_[write_index_ * 16 + 1] = store1[1];
+        // feedback_memorie_[write_index_ * 16 + 2] = store1[2];
+        // feedback_memorie_[write_index_ * 16 + 3] = store1[3];
+        // feedback_memorie_[write_index_ * 16 + 4] = store1[4];
+        // feedback_memorie_[write_index_ * 16 + 5] = store1[5];
+        // feedback_memorie_[write_index_ * 16 + 6] = store1[6];
+        // feedback_memorie_[write_index_ * 16 + 7] = store1[7];
+        // feedback_memorie_[write_index_ * 16 + 8] = store2[0];
+        // feedback_memorie_[write_index_ * 16 + 9] = store2[1];
+        // feedback_memorie_[write_index_ * 16 + 10] = store2[2];
+        // feedback_memorie_[write_index_ * 16 + 11] = store2[3];
+        // feedback_memorie_[write_index_ * 16 + 12] = store2[4];
+        // feedback_memorie_[write_index_ * 16 + 13] = store2[5];
+        // feedback_memorie_[write_index_ * 16 + 14] = store2[6];
+        // feedback_memorie_[write_index_ * 16 + 15] = store2[7];
+#endif
     }
 
     simd::Float128 ReadAllpass(size_t i, simd::Int128 offset) noexcept {
@@ -183,12 +301,7 @@ struct LaneNState {
 #else
         static const int32_t lane_offsets_data[8] = {0, 1, 2, 3, 4, 5, 6, 7};
         simde__m256i lane_offsets = simde_mm256_loadu_si256(lane_offsets_data);
-        
-        // vindex = irpos << 3 (即 * 8) + lane_offsets
         simde__m256i vindex = simde_mm256_add_epi32(simde_mm256_slli_epi32(irpos, 3), lane_offsets);
-
-        // 3. 执行 Gather
-        // scale = 4，因为我们读的是 float (4 bytes)
         float const* raw = reinterpret_cast<const float*>(buffer.data());
         return simde_mm256_i32gather_ps(raw, vindex, 4);
 #endif
