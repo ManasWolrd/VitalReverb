@@ -158,10 +158,10 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
     auto delta_decay4 = (self.decays_[3] - current_decay4) * tick_increment;
 
     const simd::Int128* allpass_delays = (const simd::Int128*)kAllpassDelays.data();
-    auto allpass_offset1 = simd::ToInt128(simd::ToFloat128(allpass_delays[0]) * self.buffer_scale_ratio_);
-    auto allpass_offset2 = simd::ToInt128(simd::ToFloat128(allpass_delays[1]) * self.buffer_scale_ratio_);
-    auto allpass_offset3 = simd::ToInt128(simd::ToFloat128(allpass_delays[2]) * self.buffer_scale_ratio_);
-    auto allpass_offset4 = simd::ToInt128(simd::ToFloat128(allpass_delays[3]) * self.buffer_scale_ratio_);
+    auto allpass_offset1 = simd::ToInt(simd::ToFloat(allpass_delays[0]) * self.buffer_scale_ratio_);
+    auto allpass_offset2 = simd::ToInt(simd::ToFloat(allpass_delays[1]) * self.buffer_scale_ratio_);
+    auto allpass_offset3 = simd::ToInt(simd::ToFloat(allpass_delays[2]) * self.buffer_scale_ratio_);
+    auto allpass_offset4 = simd::ToInt(simd::ToFloat(allpass_delays[3]) * self.buffer_scale_ratio_);
 
     float const chorus_phase_increment = param.chorus_freq / self.fs_;
 
@@ -274,7 +274,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         auto write3 = other_feedback + allpass_output3;
         auto write4 = other_feedback + allpass_output4;
 
-        auto [t1, t2, t3, t4] = simd::Transpose(allpass_output1, allpass_output2, allpass_output3, allpass_output4);
+        alignas(16) auto [t1, t2, t3, t4] = simd::Transpose(allpass_output1, allpass_output2, allpass_output3, allpass_output4);
         auto adjacent_feedback = (t1 + t2 + t3 + t4) * (-0.5f);
         write1 += adjacent_feedback[0];
         write2 += adjacent_feedback[1];
@@ -336,7 +336,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         auto feed_forward3 = other_feedback_allpass + store3;
         auto feed_forward4 = other_feedback_allpass + store4;
 
-        auto [s1, s2, s3, s4] = simd::Transpose(store1, store2, store3, store4);
+        alignas(16) auto [s1, s2, s3, s4] = simd::Transpose(store1, store2, store3, store4);
         auto adjacent_feedback_allpass = (s1 + s2 + s3 + s4) * (-0.5f);
 
         feed_forward1 += (adjacent_feedback_allpass[0]);

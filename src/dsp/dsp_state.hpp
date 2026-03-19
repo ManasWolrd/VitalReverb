@@ -133,11 +133,11 @@ struct LaneNState {
 
     simd::Float128 ReadFeedback(size_t idx, simd::Float128 offset) noexcept {
         simd::Float128 rpos = (static_cast<float>(write_index_ + feedback_mask_)) - offset;
-        auto irpos = (simd::ToInt128(rpos) - 1) & feedback_mask_;
-        simd::Float128 t = simd::Frac128(rpos);
+        auto irpos = (simd::ToInt(rpos) - 1) & feedback_mask_;
+        simd::Float128 t = simd::Frac(rpos);
 
         // load [-1, 0, 1, 2]
-        auto [yn1, y0, y1, y2] = simd::Transpose(simd::Loadu128(feedback_ptrs_[idx * 4] + irpos[0]),
+        alignas(16) auto [yn1, y0, y1, y2] = simd::Transpose(simd::Loadu128(feedback_ptrs_[idx * 4] + irpos[0]),
                                                  simd::Loadu128(feedback_ptrs_[idx * 4 + 1] + irpos[1]),
                                                  simd::Loadu128(feedback_ptrs_[idx * 4 + 2] + irpos[2]),
                                                  simd::Loadu128(feedback_ptrs_[idx * 4 + 3] + irpos[3]));
@@ -152,12 +152,12 @@ struct LaneNState {
 
     simd::Float256 ReadFeedback(size_t idx, simd::Float256 offset) noexcept {
         simd::Float256 rpos = (static_cast<float>(write_index_ + feedback_mask_)) - offset;
-        auto irpos = (simd::ToInt256(rpos) - 1) & feedback_mask_;
-        simd::Float256 t = simd::Frac256(rpos);
+        auto irpos = (simd::ToInt(rpos) - 1) & feedback_mask_;
+        simd::Float256 t = simd::Frac(rpos);
 
 #ifndef SIMDE_X86_AVX2_NATIVE
         // load [-1, 0, 1, 2]
-        auto [yn1, y0, y1, y2] = simd::Transpose256(simd::Loadu128(feedback_ptrs_[idx * 8] + irpos[0]),
+        alignas(32) auto [yn1, y0, y1, y2] = simd::Transpose256(simd::Loadu128(feedback_ptrs_[idx * 8] + irpos[0]),
                                                     simd::Loadu128(feedback_ptrs_[idx * 8 + 1] + irpos[1]),
                                                     simd::Loadu128(feedback_ptrs_[idx * 8 + 2] + irpos[2]),
                                                     simd::Loadu128(feedback_ptrs_[idx * 8 + 3] + irpos[3]),

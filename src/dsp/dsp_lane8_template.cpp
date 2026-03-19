@@ -110,8 +110,8 @@ static inline simd::Float256 _InternalSum(simd::Float256 x) noexcept {
 
 static inline void _ScatterLane8(simd::Float256 in1, simd::Float256 in2, simd::Float256& out1,
                                  simd::Float256& out2) noexcept {
-    auto [ao1, ao2] = simd::Break(in1);
-    auto [ao3, ao4] = simd::Break(in2);
+    alignas(32) auto [ao1, ao2] = simd::Break(in1);
+    alignas(32) auto [ao3, ao4] = simd::Break(in2);
     auto row_sum = ao1 + ao2 + ao3 + ao4;
     auto total_rows = simd::Combine(row_sum, row_sum);
     auto sum_all = simd::ReduceAdd(in1 + in2);
@@ -182,8 +182,8 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
     auto delta_decay2 = (self.decays_[1] - current_decay2) * tick_increment;
 
     const simd::Int256* allpass_delays = (const simd::Int256*)kAllpassDelays.data();
-    auto allpass_offset1 = simd::ToInt256(simd::ToFloat256(allpass_delays[0]) * self.buffer_scale_ratio_);
-    auto allpass_offset2 = simd::ToInt256(simd::ToFloat256(allpass_delays[1]) * self.buffer_scale_ratio_);
+    auto allpass_offset1 = simd::ToInt(simd::ToFloat(allpass_delays[0]) * self.buffer_scale_ratio_);
+    auto allpass_offset2 = simd::ToInt(simd::ToFloat(allpass_delays[1]) * self.buffer_scale_ratio_);
 
     float const chorus_phase_increment = param.chorus_freq / self.fs_;
 
