@@ -24,6 +24,7 @@ private:
     }
     pluginshared::PresetPanel preset_;
 
+    ui::Switch freeze_{"freeze"};
     ui::Dial chorus_amount_{"CHOR AMT"};
     ui::Dial chorus_freq_{"CHOR FREQ"};
     ui::Dial mix_{"MIX"};

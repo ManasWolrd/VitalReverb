@@ -60,6 +60,7 @@ public:
     juce::AudioParameterFloat* param_size_;
     juce::AudioParameterFloat* param_decay_ms_;
     juce::AudioParameterFloat* param_predelay_;
+    juce::AudioParameterBool* param_freeze_;
 
     dsp::ProcessorDsp dsp_processor_;
     dsp::ProcessorState dsp_state_;

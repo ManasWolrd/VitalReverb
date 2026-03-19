@@ -18,7 +18,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
 
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "chorus amount",
+            juce::ParameterID{"chorus amount", 1},
             "chorus amount",
             0.0f, 1.0f, 0.05f
         );
@@ -27,7 +27,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "chorus freq",
+            juce::ParameterID{"chorus freq", 1},
             "chorus freq",
             juce::NormalisableRange<float>{0.003f, 8.0f, 0.001f, 0.4f},
             0.25f
@@ -37,7 +37,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "mix",
+            juce::ParameterID{"mix", 1},
             "mix",
             0.0f, 1.0f, 0.25f
         );
@@ -46,7 +46,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "pre lowpass",
+            juce::ParameterID{"pre lowpass", 1},
             "pre lowpass",
             0.0f, 130.0f, 0.0f
         );
@@ -55,7 +55,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "pre highpass",
+            juce::ParameterID{"pre highpass", 1},
             "pre highpass",
             0.0f, 130.0f, 110.0f
         );
@@ -64,7 +64,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "low damp",
+            juce::ParameterID{"low damp", 1},
             "low damp",
             0.0f, 130.0f, 0.0f
         );
@@ -73,7 +73,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "high damp",
+            juce::ParameterID{"high damp", 1},
             "high damp",
             0.0f, 130.0f, 90.0f
         );
@@ -82,7 +82,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "low gain",
+            juce::ParameterID{"low gain", 1},
             "low gain",
             -6.0f, 0.0f, 0.0f
         );
@@ -91,7 +91,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "high gain",
+            juce::ParameterID{"high gain", 1},
             "high gain",
             -6.0f, 0.0f, -1.0f
         );
@@ -100,7 +100,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "size",
+            juce::ParameterID{"size", 1},
             "size",
             0.0f, 1.0f, 0.5f
         );
@@ -109,7 +109,7 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "decay",
+            juce::ParameterID{"decay", 1},
             "decay",
             juce::NormalisableRange<float>{15.0f, 64000.0f, 1.0f, 0.4f},
             1000.0f
@@ -119,12 +119,21 @@ EmptyAudioProcessor::EmptyAudioProcessor()
     }
     {
         auto p = std::make_unique<juce::AudioParameterFloat>(
-            "predelay",
+            juce::ParameterID{"predelay", 1},
             "predelay",
             juce::NormalisableRange<float>{0.0f, 300.0f, 1.0f, 0.4f},
             0.0f
         );
         param_predelay_ = p.get();
+        layout.add(std::move(p));
+    }
+    {
+        auto p = std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{"freeze", 1},
+            "freeze",
+            false
+        );
+        param_freeze_ = p.get();
         layout.add(std::move(p));
     }
 
@@ -254,6 +263,7 @@ void EmptyAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     dsp_param_.size = param_size_->get();
     dsp_param_.decay_ms = param_decay_ms_->get();
     dsp_param_.pre_delay = param_predelay_->get();
+    dsp_param_.freeze = param_freeze_->get();
     dsp_processor_.update(dsp_state_, dsp_param_);
 
     dsp_processor_.process(dsp_state_, left_ptr, right_ptr, num_samples);

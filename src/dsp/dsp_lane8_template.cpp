@@ -173,9 +173,14 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
     float const decay_period = size_mult / decay_samples;
     simd::Float256 current_decay1 = self.decays_[0];
     simd::Float256 current_decay2 = self.decays_[1];
-    for (size_t j = 0; j < self.kContainerSize; ++j) {
-        for (size_t i = 0; i < 8; ++i) {
-            self.decays_[j][i] = std::pow(kT60Amplitude, kFeedbackDelays[j * 8 + i] * decay_period);
+    if (param.freeze) {
+        self.decays_.fill(simd::BroadcastF256(1.0f));
+    }
+    else {
+        for (size_t j = 0; j < self.kContainerSize; ++j) {
+            for (size_t i = 0; i < 8; ++i) {
+                self.decays_[j][i] = std::pow(kT60Amplitude, kFeedbackDelays[j * 8 + i] * decay_period);
+            }
         }
     }
     auto delta_decay1 = (self.decays_[0] - current_decay1) * tick_increment;
@@ -230,6 +235,8 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
     auto feedback_offset2 = self.feedback_offsets_[1];
     float const feedback_smooth = self.feedback_offset_smooth_factor_;
 
+    float input_gain = param.freeze ? 0.0f : 1.0f;
+
     for (int i = 0; i < num_samples; ++i) {
         // paralle chorus delaylines
         current_chorus_amount += delta_chorus_amount;
@@ -251,7 +258,7 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         simd::Float128 input{left[i], right[i], left[i], right[i]};
         auto pre_high_coeff_v = simd::BroadcastF128(current_high_pre_coefficient);
         auto pre_low_coeff_v = simd::BroadcastF128(current_low_pre_coefficient);
-        auto filtered_input = self.high_pre_filter_.TickLowpass(input, pre_high_coeff_v);
+        auto filtered_input = self.high_pre_filter_.TickLowpass(input * input_gain, pre_high_coeff_v);
         filtered_input = self.low_pre_filter_.TickLowpass(input, pre_low_coeff_v) - filtered_input;
         auto scaled_input = simd::Combine(filtered_input, filtered_input) * 0.5f;
 

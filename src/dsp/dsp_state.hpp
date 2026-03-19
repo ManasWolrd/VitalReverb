@@ -27,6 +27,7 @@ struct Param {
     float size{0.5f};             // [0, 1]
     float decay_ms{1000.0f};      // [15ms, 64s]
     float pre_delay{0.0f};        // [0, 300ms]
+    bool freeze{false};
 };
 
 // ----------------------------------------

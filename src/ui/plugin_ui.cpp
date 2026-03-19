@@ -30,16 +30,21 @@ PluginUi::PluginUi(EmptyAudioProcessor& p)
     addAndMakeVisible(decay_);
     predelay_.BindParam(p.param_predelay_);
     addAndMakeVisible(predelay_);
+    freeze_.BindParam(p.param_freeze_);
+    addAndMakeVisible(freeze_);
 
-    setSize(500, 200);
+    setSize(500, 230);
 }
 
 void PluginUi::resized() {
     auto b = getLocalBounds();
     preset_.setBounds(b.removeFromTop(std::max(30, b.proportionOfHeight(0.1f))));
 
+    auto top = b.removeFromTop(30);
+    freeze_.setBounds(top.removeFromLeft(80).reduced(2));
+
     int w = b.getWidth() / 6;
-    auto top = b.removeFromTop(b.getHeight() / 2);
+    top = b.removeFromTop(b.getHeight() / 2);
     pre_lowpass_.setBounds(top.removeFromLeft(w));
     low_damp_.setBounds(top.removeFromLeft(w));
     high_damp_.setBounds(top.removeFromLeft(w));
