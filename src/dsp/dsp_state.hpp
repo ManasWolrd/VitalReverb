@@ -322,8 +322,10 @@ struct ProcessorDsp {
     void (*update)(ProcessorState& state, const Param& p) noexcept;
     void (*process)(ProcessorState& state, float* left, float* right, int num_samples) noexcept;
 
+    const char* name;
+
     bool IsValid() const noexcept {
-        return init != nullptr && reset != nullptr && update != nullptr && process != nullptr;
+        return init != nullptr;
     }
 };
 

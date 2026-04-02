@@ -249,7 +249,7 @@ void EmptyAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     int const num_samples = buffer.getNumSamples();
     float* left_ptr = buffer.getWritePointer(0);
-    float* right_ptr = buffer.getWritePointer(1);
+    float* right_ptr = buffer.getNumChannels() == 2 ? buffer.getWritePointer(1) : nullptr;
 
     dsp_param_.chorus_amount = param_chorus_amount_->get();
     dsp_param_.chorus_freq = param_chorus_freq_->get();

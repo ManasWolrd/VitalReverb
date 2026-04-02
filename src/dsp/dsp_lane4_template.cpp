@@ -94,7 +94,8 @@ static void Update(dsp::ProcessorState& state, const dsp::Param& p) noexcept {
     state.param = p;
 }
 
-static void Process(dsp::ProcessorState& state, float* left, float* right, int num_samples) noexcept {
+template <bool kMono>
+static void ProcessInternal(dsp::ProcessorState& state, float* left, float* right, int num_samples) noexcept {
     auto& self = state.lane4;
     const auto& param = state.param;
     
@@ -242,7 +243,13 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         auto feedback_read3 = self.ReadFeedback(2, feedback_offset3);
         auto feedback_read4 = self.ReadFeedback(3, feedback_offset4);
 
-        simd::Float128 input{left[i], right[i], left[i], right[i]};
+        simd::Float128 input;
+        if constexpr (kMono) {
+            input = simd::Float128{left[i], left[i], left[i], left[i]};
+        }
+        else {
+            input = simd::Float128{left[i], right[i], left[i], right[i]};
+        }
         auto filtered_input = self.high_pre_filter_.TickLowpass(input * input_gain, simd::BroadcastF128(current_high_pre_coefficient));
         filtered_input = self.low_pre_filter_.TickLowpass(input, simd::BroadcastF128(current_low_pre_coefficient)) - filtered_input;
         auto scaled_input = filtered_input * 0.5f;
@@ -362,7 +369,9 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
         self.predelay_.Push(output);
         auto audio_out = current_wet * self.predelay_.GetAfterPush(current_sample_delay) + current_dry * input;
         left[i] = audio_out[0];
-        right[i] = audio_out[1];
+        if constexpr (!kMono) {
+            right[i] = audio_out[1];
+        }
 
         current_delay_increment += delta_delay_increment;
         current_sample_delay += current_delay_increment;
@@ -385,6 +394,15 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
     self.feedback_offsets_[3] = feedback_offset4;
 }
 
+static void Process(dsp::ProcessorState& state, float* left, float* right, int num_samples) noexcept {
+    if (right == nullptr) {
+        ProcessInternal<true>(state, left, right, num_samples);
+    }
+    else {
+        ProcessInternal<false>(state, left, right, num_samples);
+    }
+}
+
 // ----------------------------------------
 // export
 // ----------------------------------------
@@ -393,5 +411,5 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
 #error "不应该编译这个文件,在其他cpp包含这个cpp并定义DSP_EXPORT_NAME=`dsp_dispatch.cpp里的变量`"
 #endif
 
-ProcessorDsp DSP_EXPORT_NAME{Init, Reset, Update, Process};
+ProcessorDsp DSP_EXPORT_NAME{Init, Reset, Update, Process, DSP_INST_NAME};
 } // namespace dsp

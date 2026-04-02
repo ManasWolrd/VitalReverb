@@ -4,6 +4,7 @@
 
 PluginUi::PluginUi(EmptyAudioProcessor& p)
     : preset_(*p.preset_manager_) {
+    preset_.SetDspInstName(p.dsp_processor_.name);
     addAndMakeVisible(preset_);
 
     chorus_amount_.BindParam(p.param_chorus_amount_);
