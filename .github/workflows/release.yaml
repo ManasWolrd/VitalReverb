@@ -29,12 +29,15 @@ jobs:
     - name: Install IPP (Windows)
       run: |
         nuget install intelipp.static.win-x64 -Version 2022.3.0.387
+
     - name: Generate Build Files
       run: |
         cmake -G "Ninja" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DBUILD_IN_CI=1 -S . -B ./build
+
     - name: Build Project
       run: |
         cmake --build ./build --config Release
+
     - name: List errors
       run: |
         if exist .\build\CMakeFiles\CMakeError.log type .\build\CMakeFiles\CMakeError.log
@@ -48,6 +51,7 @@ jobs:
           ./build/*_artefacts/Release/VST3
           !./build/*_artefacts/Release/VST3/*.exp
           !./build/*_artefacts/Release/VST3/*.lib
+
   build-macos:
     runs-on: macos-latest
     steps:
@@ -62,9 +66,11 @@ jobs:
     - name: Generate Build Files
       run: |
         cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DBUILD_IN_CI=1 -S . -B ./build
+
     - name: Build Project
       run: |
         cmake --build ./build --config Release
+
     - name: List errors
       run: cat "./build/CMakeFiles/CMakeError.log" || true
 
@@ -77,6 +83,7 @@ jobs:
           ./build/*_artefacts/Release/VST3
           !./build/*_artefacts/Release/VST3/*.exp
           !./build/*_artefacts/Release/VST3/*.lib
+
   build-linux:
     runs-on: ubuntu-22.04
     steps:
@@ -89,6 +96,7 @@ jobs:
       run: |
         sudo apt update
         sudo apt-get install libx11-dev libfreetype-dev libfontconfig1-dev libasound2-dev libxrandr-dev libxinerama-dev libxcursor-dev
+
     # from pamplejuce
     - name: Install JUCE's Linux Deps
       # Thanks to McMartin & co https://forum.juce.com/t/list-of-juce-dependencies-under-linux/15121/44
@@ -96,14 +104,18 @@ jobs:
         # IPP stuff
         wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
         echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+
         sudo apt-get update && sudo apt install libasound2-dev libx11-dev libxinerama-dev libxext-dev libfreetype6-dev libwebkit2gtk-4.1-dev libglu1-mesa-dev xvfb ninja-build intel-oneapi-ipp-devel
         sudo /usr/bin/Xvfb $DISPLAY &
+
     - name: Generate Build Files
       run: |
         cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DBUILD_IN_CI=1 -S . -B ./build
+
     - name: Build Project
       run: |
         cmake --build ./build --config Release
+
     - name: List errors
       run: cat "./build/CMakeFiles/CMakeError.log" || true
 
@@ -116,6 +128,7 @@ jobs:
           ./build/*_artefacts/Release/VST3
           !./build/*_artefacts/Release/VST3/*.exp
           !./build/*_artefacts/Release/VST3/*.lib
+
   release:
     runs-on: ubuntu-latest
     needs: [ build-windows, build-macos, build-linux ]
@@ -139,22 +152,46 @@ jobs:
         name: plugin-linux
         path: artifacts/plugin-linux
 
+    # - name: Append tag to artifacts
+    #   run: |
+    #     TAG_NAME=${GITHUB_REF#refs/tags/}  # Extracts the tag name, e.g., v1.0.0
+
+    #     # Zip each platform's artifacts with the tag in the name
+    #     cd artifacts
+    #     zip -r plugin-win-${TAG_NAME}.zip plugin-win
+    #     zip -r plugin-macos-${TAG_NAME}.zip plugin-macos
+    #     zip -r plugin-linux-${TAG_NAME}.zip plugin-linux
     - name: Append tag to artifacts
       run: |
-        TAG_NAME=${GITHUB_REF#refs/tags/}  # Extracts the tag name, e.g., v1.0.0
-        # Zip each platform's artifacts with the tag in the name
-        cd artifacts
-        zip -r plugin-win-${TAG_NAME}.zip plugin-win
-        zip -r plugin-macos-${TAG_NAME}.zip plugin-macos
-        zip -r plugin-linux-${TAG_NAME}.zip plugin-linux
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        REPO_NAME="${{ github.event.repository.name }}"
+            
+        MAC_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-macos -type d -name "Release" | head -n 1)
+        WIN_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-win -type d -name "Release" | head -n 1)
+        LINUX_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-linux -type d -name "Release" | head -n 1)
+
+        DEST_DIR="$GITHUB_WORKSPACE/artifacts"
+
+        cd "$WIN_RELEASE_DIR"
+        zip -r "${REPO_NAME}-win-${TAG_NAME}.zip" .
+        cp "${REPO_NAME}-win-${TAG_NAME}.zip" "$DEST_DIR/"
+
+        cd "$MAC_RELEASE_DIR"
+        zip -r "${REPO_NAME}-macos-${TAG_NAME}.zip" .
+        cp "${REPO_NAME}-macos-${TAG_NAME}.zip" "$DEST_DIR/"
+
+        cd "$LINUX_RELEASE_DIR"
+        zip -r "${REPO_NAME}-linux-${TAG_NAME}.zip" .
+        cp "${REPO_NAME}-linux-${TAG_NAME}.zip" "$DEST_DIR/"
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         draft: true
         tag_name: ${{ github.ref_name }}
         files: |
-          artifacts/plugin-win-*.zip
-          artifacts/plugin-macos-*.zip
-          artifacts/plugin-linux-*.zip
+          artifacts/*-win-*.zip
+          artifacts/*-macos-*.zip
+          artifacts/*-linux-*.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

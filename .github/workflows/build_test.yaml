@@ -4,6 +4,9 @@ name: macOS/Windows/Linux Test
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+    - 'README.md'
+    - 'docs/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
