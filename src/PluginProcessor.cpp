@@ -211,12 +211,19 @@ void EmptyAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) 
 
     float fs = static_cast<float>(sampleRate);
     dsp_processor_.init(dsp_state_, fs);
+    dsp_processor_.reset(dsp_state_);
     param_listener_.MarkAll();
 }
 
 void EmptyAudioProcessor::releaseResources() {
     // When playback stops, you can use this as an opportunity to free up any
     // spare memory, etc.
+}
+
+void EmptyAudioProcessor::reset() {
+    if (dsp_processor_.IsValid()) {
+        dsp_processor_.panic(dsp_state_);
+    }
 }
 
 bool EmptyAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {

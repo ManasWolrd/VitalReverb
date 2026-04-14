@@ -112,6 +112,23 @@ struct LaneNState {
     float fs_ratio_{};
     float buffer_scale_ratio_{};
 
+    // 使用reset会导致奇怪的chirp，所以加个panic单独清除
+    void Panic() noexcept {
+        for (auto& s : allpass_lookups_) {
+            std::fill(s.begin(), s.end(), SimdT{});
+        }
+        std::fill(feedback_memorie_.begin(), feedback_memorie_.end(), 0.0f);
+        predelay_.Reset();
+        for (auto& s : low_shelf_filters_) {
+            s.Reset();
+        }
+        for (auto& s : high_shelf_filters_) {
+            s.Reset();
+        }
+        low_pre_filter_.Reset();
+        high_pre_filter_.Reset();
+    }
+
     void WarpBuffer() noexcept {
 #ifndef SIMDE_X86_AVX2_NATIVE
         for (auto ptr : feedback_ptrs_) {
@@ -319,6 +336,7 @@ struct ProcessorState {
 struct ProcessorDsp {
     void (*init)(ProcessorState& state, float fs) noexcept;
     void (*reset)(ProcessorState& state) noexcept;
+    void (*panic)(ProcessorState& state) noexcept;
     void (*update)(ProcessorState& state, const Param& p) noexcept;
     void (*process)(ProcessorState& state, float* left, float* right, int num_samples) noexcept;
 

@@ -403,6 +403,10 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
     }
 }
 
+static void Panic(dsp::ProcessorState& state) noexcept {
+    state.lane4.Panic();
+}
+
 // ----------------------------------------
 // export
 // ----------------------------------------
@@ -411,5 +415,5 @@ static void Process(dsp::ProcessorState& state, float* left, float* right, int n
 #error "不应该编译这个文件,在其他cpp包含这个cpp并定义DSP_EXPORT_NAME=`dsp_dispatch.cpp里的变量`"
 #endif
 
-ProcessorDsp DSP_EXPORT_NAME{Init, Reset, Update, Process, DSP_INST_NAME};
+ProcessorDsp DSP_EXPORT_NAME{Init, Reset, Panic, Update, Process, DSP_INST_NAME};
 } // namespace dsp
