@@ -8,190 +8,204 @@ on:
   workflow_dispatch:
   push:
     tags:
-    - 'v*'
+      - "v*"
+
+env:
+  BUILD_TYPE: Release
+  BUILD_DIR: Builds
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  DISPLAY: :0 # linux pluginval needs this
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  SCCACHE_GHA_ENABLED: true
+  SCCACHE_CACHE_MULTIARCH: 1
 
 jobs:
-  build-windows:
-    runs-on: windows-2022
+  build:
+    name: build-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-2022
+            artifact_name: plugin-win
+          - name: macOS-x86
+            os: macos-latest
+            macos_arch: x86_64
+            artifact_name: plugin-macos-x64
+          - name: macOS-arm
+            os: macos-latest
+            macos_arch: arm64
+            artifact_name: plugin-macos-arm64
+          - name: Linux
+            os: ubuntu-22.04
+            artifact_name: plugin-linux
+
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Install Clang
-      uses: egor-tensin/setup-clang@v2
-      with:
-        version: latest
-        platform: x86
-        cc: 1
+      - name: Install Clang (Windows)
+        if: runner.os == 'Windows'
+        uses: egor-tensin/setup-clang@v2
+        with:
+          version: latest
+          platform: x86
+          cc: 1
 
-    - name: Install IPP (Windows)
-      run: |
-        nuget install intelipp.static.win-x64 -Version 2022.3.0.387
+      - name: Install IPP (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          nuget install intelipp.static.win-x64 -Version 2022.3.0.387
 
-    - name: Generate Build Files
-      run: |
-        cmake -G "Ninja" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DBUILD_IN_CI=1 -S . -B ./build
+      - name: Install Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
 
-    - name: Build Project
-      run: |
-        cmake --build ./build --config Release
+      - name: Install Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt-get install libx11-dev libfreetype-dev libfontconfig1-dev libasound2-dev libxrandr-dev libxinerama-dev libxcursor-dev
 
-    - name: List errors
-      run: |
-        if exist .\build\CMakeFiles\CMakeError.log type .\build\CMakeFiles\CMakeError.log
-      shell: cmd
+      - name: Install JUCE's Linux Deps
+        if: runner.os == 'Linux'
+        run: |
+          wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
 
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: plugin-win
-        path: |
-          ./build/*_artefacts/Release/VST3
-          !./build/*_artefacts/Release/VST3/*.exp
-          !./build/*_artefacts/Release/VST3/*.lib
+          sudo apt-get update && sudo apt install libasound2-dev libx11-dev libxinerama-dev libxext-dev libfreetype6-dev libwebkit2gtk-4.1-dev libglu1-mesa-dev xvfb ninja-build intel-oneapi-ipp-devel
+          sudo /usr/bin/Xvfb $DISPLAY &
 
-  build-macos:
-    runs-on: macos-latest
-    steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - name: Generate Build Files (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -G "Ninja" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DIPP_SHARED=OFF -DBUILD_IN_CI=1 -S . -B ./build
 
-    - name: Install Dependencies
-      run: brew install cmake ninja
+      - name: Generate Build Files (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCMAKE_OSX_ARCHITECTURES="${{ matrix.macos_arch }}" -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DIPP_SHARED=OFF -DBUILD_IN_CI=1 -S . -B ./build
 
-    - name: Generate Build Files
-      run: |
-        cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DBUILD_IN_CI=1 -S . -B ./build
+      - name: Generate Build Files (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DIPP_SHARED=OFF -DBUILD_IN_CI=1 -S . -B ./build
 
-    - name: Build Project
-      run: |
-        cmake --build ./build --config Release
+      - name: Build Project
+        run: |
+          cmake --build ./build --config Release
 
-    - name: List errors
-      run: cat "./build/CMakeFiles/CMakeError.log" || true
+      - name: List errors (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if exist .\build\CMakeFiles\CMakeError.log type .\build\CMakeFiles\CMakeError.log
+        shell: cmd
 
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: plugin-macos
-        path: |
-          ./build/*_artefacts/Release/AU
-          ./build/*_artefacts/Release/VST3
-          !./build/*_artefacts/Release/VST3/*.exp
-          !./build/*_artefacts/Release/VST3/*.lib
+      - name: List errors (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: cat "./build/CMakeFiles/CMakeError.log" || true
 
-  build-linux:
-    runs-on: ubuntu-22.04
-    steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - name: Upload (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ./build/*_artefacts/Release/VST3
+            !./build/*_artefacts/Release/VST3/*.exp
+            !./build/*_artefacts/Release/VST3/*.lib
 
-    - name: Install Dependencies
-      run: |
-        sudo apt update
-        sudo apt-get install libx11-dev libfreetype-dev libfontconfig1-dev libasound2-dev libxrandr-dev libxinerama-dev libxcursor-dev
+      - name: Upload (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ./build/*_artefacts/Release/AU
+            ./build/*_artefacts/Release/VST3
+            !./build/*_artefacts/Release/VST3/*.exp
+            !./build/*_artefacts/Release/VST3/*.lib
 
-    # from pamplejuce
-    - name: Install JUCE's Linux Deps
-      # Thanks to McMartin & co https://forum.juce.com/t/list-of-juce-dependencies-under-linux/15121/44
-      run: |
-        # IPP stuff
-        wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-        echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
-
-        sudo apt-get update && sudo apt install libasound2-dev libx11-dev libxinerama-dev libxext-dev libfreetype6-dev libwebkit2gtk-4.1-dev libglu1-mesa-dev xvfb ninja-build intel-oneapi-ipp-devel
-        sudo /usr/bin/Xvfb $DISPLAY &
-
-    - name: Generate Build Files
-      run: |
-        cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_STANDALONE=OFF -DCPP_SIMD_DETECTOR_BUILD_EXAMPLES=OFF -DBUILD_IN_CI=1 -S . -B ./build
-
-    - name: Build Project
-      run: |
-        cmake --build ./build --config Release
-
-    - name: List errors
-      run: cat "./build/CMakeFiles/CMakeError.log" || true
-
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: plugin-linux
-        path: |
-          ./build/*_artefacts/Release/LV2
-          ./build/*_artefacts/Release/VST3
-          !./build/*_artefacts/Release/VST3/*.exp
-          !./build/*_artefacts/Release/VST3/*.lib
+      - name: Upload (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ./build/*_artefacts/Release/LV2
+            ./build/*_artefacts/Release/VST3
+            !./build/*_artefacts/Release/VST3/*.exp
+            !./build/*_artefacts/Release/VST3/*.lib
 
   release:
     runs-on: ubuntu-latest
-    needs: [ build-windows, build-macos, build-linux ]
+    needs: [build]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     steps:
-    - name: Download Windows artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: plugin-win
-        path: artifacts/plugin-win
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-win
+          path: artifacts/plugin-win
 
-    - name: Download macOS artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: plugin-macos
-        path: artifacts/plugin-macos
+      - name: Download macOS x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-macos-x64
+          path: artifacts/plugin-macos-x64
 
-    - name: Download Linux artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: plugin-linux
-        path: artifacts/plugin-linux
+      - name: Download macOS ARM64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-macos-arm64
+          path: artifacts/plugin-macos-arm64
 
-    # - name: Append tag to artifacts
-    #   run: |
-    #     TAG_NAME=${GITHUB_REF#refs/tags/}  # Extracts the tag name, e.g., v1.0.0
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-linux
+          path: artifacts/plugin-linux
 
-    #     # Zip each platform's artifacts with the tag in the name
-    #     cd artifacts
-    #     zip -r plugin-win-${TAG_NAME}.zip plugin-win
-    #     zip -r plugin-macos-${TAG_NAME}.zip plugin-macos
-    #     zip -r plugin-linux-${TAG_NAME}.zip plugin-linux
-    - name: Append tag to artifacts
-      run: |
-        TAG_NAME=${GITHUB_REF#refs/tags/}
-        REPO_NAME="${{ github.event.repository.name }}"
-            
-        MAC_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-macos -type d -name "Release" | head -n 1)
-        WIN_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-win -type d -name "Release" | head -n 1)
-        LINUX_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-linux -type d -name "Release" | head -n 1)
+      - name: Append tag to artifacts
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          REPO_NAME="${{ github.event.repository.name }}"
 
-        DEST_DIR="$GITHUB_WORKSPACE/artifacts"
+          MAC_X64_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-macos-x64 -type d -name "Release" | head -n 1)
+          MAC_ARM64_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-macos-arm64 -type d -name "Release" | head -n 1)
+          WIN_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-win -type d -name "Release" | head -n 1)
+          LINUX_RELEASE_DIR=$(find $GITHUB_WORKSPACE/artifacts/plugin-linux -type d -name "Release" | head -n 1)
 
-        cd "$WIN_RELEASE_DIR"
-        zip -r "${REPO_NAME}-win-${TAG_NAME}.zip" .
-        cp "${REPO_NAME}-win-${TAG_NAME}.zip" "$DEST_DIR/"
+          DEST_DIR="$GITHUB_WORKSPACE/artifacts"
 
-        cd "$MAC_RELEASE_DIR"
-        zip -r "${REPO_NAME}-macos-${TAG_NAME}.zip" .
-        cp "${REPO_NAME}-macos-${TAG_NAME}.zip" "$DEST_DIR/"
+          cd "$WIN_RELEASE_DIR"
+          zip -r "${REPO_NAME}-win-${TAG_NAME}.zip" .
+          cp "${REPO_NAME}-win-${TAG_NAME}.zip" "$DEST_DIR/"
 
-        cd "$LINUX_RELEASE_DIR"
-        zip -r "${REPO_NAME}-linux-${TAG_NAME}.zip" .
-        cp "${REPO_NAME}-linux-${TAG_NAME}.zip" "$DEST_DIR/"
+          cd "$MAC_X64_RELEASE_DIR"
+          zip -r "${REPO_NAME}-macos-x64-${TAG_NAME}.zip" .
+          cp "${REPO_NAME}-macos-x64-${TAG_NAME}.zip" "$DEST_DIR/"
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        draft: true
-        tag_name: ${{ github.ref_name }}
-        files: |
-          artifacts/*-win-*.zip
-          artifacts/*-macos-*.zip
-          artifacts/*-linux-*.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          cd "$MAC_ARM64_RELEASE_DIR"
+          zip -r "${REPO_NAME}-macos-arm64-${TAG_NAME}.zip" .
+          cp "${REPO_NAME}-macos-arm64-${TAG_NAME}.zip" "$DEST_DIR/"
+
+          cd "$LINUX_RELEASE_DIR"
+          zip -r "${REPO_NAME}-linux-${TAG_NAME}.zip" .
+          cp "${REPO_NAME}-linux-${TAG_NAME}.zip" "$DEST_DIR/"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ github.ref_name }}
+          files: |
+            artifacts/*-win-*.zip
+            artifacts/*-macos-*.zip
+            artifacts/*-linux-*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
