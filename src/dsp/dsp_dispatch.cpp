@@ -9,7 +9,7 @@ ProcessorDsp GetProcessorDsp() noexcept {
 #if defined(__aarch64__) || defined(_M_ARM64)
     extern ProcessorDsp dsp_neon;
     return dsp_neon;
-    
+
 #endif
 
 #if defined(__x86_64__) || defined(_M_X64)
