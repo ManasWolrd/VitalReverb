@@ -67,7 +67,6 @@ juce_add_plugin(${PROJECT_NAME}
 # 添加源文件
 target_sources(${PROJECT_NAME}
 PRIVATE
-    # src/dsp/dsp_lane4_template.cpp
     src/dsp/dsp_dispatch.cpp
     src/ui/plugin_ui.cpp
     src/PluginEditor.cpp
