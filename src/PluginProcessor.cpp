@@ -312,6 +312,7 @@ void EmptyAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         }
     }
 
+    reset();
     suspendProcessing(false);
 }
 
