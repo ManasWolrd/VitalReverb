@@ -1,6 +1,7 @@
 #include "plugin_ui.hpp"
 
 #include "../PluginProcessor.h"
+#include "../PluginEditor.h"
 
 PluginUi::PluginUi(EmptyAudioProcessor& p)
     : preset_(*p.preset_manager_) {
@@ -62,4 +63,10 @@ void PluginUi::resized() {
 }
 
 void PluginUi::paint(juce::Graphics& g) {
+}
+
+void PluginUi::TrySetSize(int width, int height) {
+    if (auto p = findParentComponentOfClass<EmptyAudioProcessorEditor>(); p != nullptr) {
+        p->SetNewSize(width, height);
+    }
 }

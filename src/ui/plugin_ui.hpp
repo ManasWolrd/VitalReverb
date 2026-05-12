@@ -14,14 +14,9 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
-    
-    std::function<void(int,int)> on_want_new_size;
 private:
-    void TrySetSize(int width, int height) {
-        if (on_want_new_size) {
-            on_want_new_size(width, height); 
-        }
-    }
+    void TrySetSize(int width, int height);
+
     pluginshared::PresetPanel preset_;
 
     ui::Switch freeze_{"freeze"};
